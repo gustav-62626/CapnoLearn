@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Capnography Monitor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-green: #34D399; /* Emerald 400 */
+            --bg-dark: #1F2937; /* Gray 800 */
+            --monitor-bg: #111827; /* Gray 900 */
+            --flow-blue: #60A5FA; /* Blue 400, for O2 flow */
+            font-family: 'Inter', sans-serif;
+        }
+        body {
+            background-color: var(--bg-dark);
+            color: white;
+            min-height: 10vh;
+        }
+        #capnographCanvas {
+            background-color: var(--monitor-bg);
+            border-radius: 0.5rem;
+            width: 100%;
+            height: 200px; /* Fixed height for label alignment */
+        }
+        .data-value {
+            color: var(--primary-green);
+            font-size: 2.5rem;
+            line-height: 1;
+            font-weight: 700;
+            text-shadow: 0 0 8px rgba(52, 211, 153, 0.6);
+        }
+        .monitor-card {
+            background-color: var(--monitor-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        /* Custom scrollbar for better look */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: var(--primary-green);
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        /* Disclaimer Style */
+        .disclaimer {
+            background-color: rgba(251, 191, 36, 0.1); /* Amber 400 background with opacity */
+            border: 1px solid rgba(251, 191, 36, 0.5); /* Amber 400 border */
+            color: #FBBF24; /* Amber 400 text */
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            font-size: 0.8rem;
+            text-align: center;
+            margin-top: 1.5rem; /* Added margin-top to separate it */
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 flex flex-col items-center">
+
+    <h1 class="text-3xl font-bold mb-6 text-center text-white">
+        Capnography Monitor (Educational Mode)
+    </h1>
+    
+    <!-- *** DISCLAIMER MOVED FROM HERE *** -->
+
+    <div class="w-full max-w-4xl space-y-6">
+
+        <!-- Monitor Display Section --><div class="monitor-card rounded-xl p-4 md:p-6">
+            <div class="flex flex-col md:flex-row md:space-x-6">
+                <!-- Data Panel --><div class="md:w-1/3 mb-4 md:mb-0 space-y-4">
+                    <div class="bg-gray-700/50 p-3 rounded-lg flex flex-col items-center">
+                        <span class="text-xs text-gray-400 uppercase tracking-wider">EtCO₂ (% CO2)</span>
+                        <span id="etco2Value" class="data-value">5.3</span>
+                        <!-- *** RENAMED PEECH CO2 *** -->
+                        <div class="text-xs text-gray-400">Est. PaCO₂: <span id="estPaco2Value">5.9</span> %</div>
+                    </div>
+                    <div class="bg-gray-700/50 p-3 rounded-lg flex flex-col items-center">
+                        <span class="text-xs text-gray-400 uppercase tracking-wider">Respiratory Rate (BPM)</span>
+                        <span id="rrValue" class="data-value text-blue-400">16</span>
+                    </div>
+                    
+                    <!-- Supplemental O2 Flow Panel --><div class="bg-gray-700/50 p-3 rounded-lg flex flex-col items-center">
+                        <span class="text-xs text-gray-400 uppercase tracking-wider">Supplemental O₂ Flow (L/min)</span>
+                        <span id="o2FlowValue" class="data-value text-white" style="color: var(--flow-blue);">0.0</span>
+                    </div>
+                </div>
+
+                <!-- Waveform Canvas --><div class="md:w-2/3 flex flex-col">
+                    <!-- Header with adjusted padding to clear Y-axis labels --><div class="flex justify-between items-center mb-1 pl-10">
+                        <span class="text-sm font-semibold text-white">EtCO₂ Waveform</span>
+                        <span class="text-xs text-gray-400">5s/div | <span id="waveformStatus" class="text-green-400">Monitoring...</span></span>
+                    </div>
+                    
+                    <div class="flex items-start">
+                        <!-- Y-Axis Labels Container (position calculated in JS) --><div id="yAxisLabels" class="w-10 text-right text-gray-400 text-xs relative" style="height: 200px; padding-right: 0.5rem;">
+                            <!-- Labels are absolutely positioned relative to this container --><span class="absolute top-0 right-0">7.5%</span>
+                            <span id="yAxis50" class="absolute right-0">5.0%</span>
+                            <span id="yAxis25" class="absolute right-0">2.5%</span>
+                            <span class="absolute bottom-0 right-0">0%</span>
+                        </div>
+                        <!-- Waveform Canvas --><canvas id="capnographCanvas" class="flex-grow"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls (Simulation Only) --><div class="monitor-card rounded-xl p-4 space-y-4">
+            <!-- UPDATED HEADING --><h2 class="text-xl font-semibold mb-3 text-blue-400 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <path d="M12 2v4"></path>
+                    <path d="M12 18v4"></path>
+                    <path d="M4 12h4"></path>
+                    <path d="M16 12h4"></path>
+                    <path d="M15 15l-3 3-3-3"></path>
+                    <path d="M9 9l3-3 3 3"></path>
+                </svg>
+                Scenario Selector & Simulation Controls
+            </h2>
+
+            <!-- *** REORDERED CONTROLS *** -->
+            
+            <!-- Scenario Selector Row (MOVED TO TOP) --><div class="flex flex-col sm:flex-row justify-between items-center text-sm">
+                <label for="simulationMode" class="text-gray-300 mr-4 mb-2 sm:mb-0 whitespace-nowrap">
+                    Simulation Scenario:
+                </label>
+                <select id="simulationMode" class="bg-gray-700 text-white p-2 rounded-md focus:ring-indigo-500 focus:border-indigo-500 w-full sm:w-auto">
+                    <option value="normal">1. Normal Spontaneous Breathing (Eupnea)</option>
+                    <option value="hypoventilation">2. Simple Hypoventilation (High EtCO₂)</option>
+                    <option value="hyperventilation">3. Simple Hyperventilation (Low EtCO₂)</option>
+                    <option value="rebreathing">4. Rebreathing (Elevated Baseline)</option>
+                    <option value="bronchospasm">5. Airway Obstruction ("Shark Fin")</option>
+                    <option value="cpr">6. Cardiopulmonary Arrest (CPR in Progress)</option>
+                    <option value="rosc">7. ROSC (Return of Spontaneous Circulation)</option>
+                </select>
+            </div>
+
+            <!-- NEW: Physiological EtCO2 Control Section --><div class="flex flex-col space-y-3 pt-4 border-t border-gray-700">
+                <div class="flex flex-col sm:flex-row justify-between items-center text-sm">
+                    <div class="text-gray-300 mr-4 mb-2 sm:mb-0 whitespace-nowrap">EtCO₂ Control (%):</div>
+                    <div class="flex items-center space-x-2">
+                        <button id="etco2Decrease1" class="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-lg transition duration-200 text-xs sm:text-sm">- 1.0 %</button>
+                        <button id="etco2Decrease05" class="bg-red-400 hover:bg-red-500 text-white font-bold py-1 px-3 rounded-lg transition duration-200 text-xs sm:text-sm">- 0.5 %</button>
+                        <button id="etco2Increase05" class="bg-green-400 hover:bg-green-500 text-white font-bold py-1 px-3 rounded-lg transition duration-200 text-xs sm:text-sm">+ 0.5 %</button>
+                        <button id="etco2Increase1" class="bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 rounded-lg transition duration-200 text-xs sm:text-sm">+ 1.0 %</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Respiratory Rate (RR) Control Section --><div class="flex flex-col space-y-3 pt-4 border-t border-gray-700">
+                <div class="flex flex-col sm:flex-row justify-between items-center text-sm">
+                    <div class="text-gray-300 mr-4 mb-2 sm:mb-0 whitespace-nowrap">Respiratory Rate Control (BPM):</div>
+                    <div class="flex items-center space-x-2">
+                        <button id="rrDecrease2" class="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-lg transition duration-200 text-xs sm:text-sm">- 2 BPM</button>
+                        <button id="rrDecrease1" class="bg-red-400 hover:bg-red-500 text-white font-bold py-1 px-3 rounded-lg transition duration-200 text-xs sm:text-sm">- 1 BPM</button>
+                        <button id="rrIncrease1" class="bg-green-400 hover:bg-green-500 text-white font-bold py-1 px-3 rounded-lg transition duration-200 text-xs sm:text-sm">+ 1 BPM</button>
+                        <button id="rrIncrease2" class="bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 rounded-lg transition duration-200 text-xs sm:text-sm">+ 2 BPM</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- O2 Flow Control Section --><div class="flex flex-col space-y-3 pt-4 border-t border-gray-700">
+                <div class="flex flex-col sm:flex-row justify-between items-center text-sm">
+                    <div class="text-gray-300 mr-4 mb-2 sm:mb-0 whitespace-nowrap">Supplemental O₂ Flow Control (L/min):</div>
+                    <div class="flex items-center space-x-2">
+                        <button id="o2Decrease" class="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-lg transition duration-200 text-xs sm:text-sm">- 1.0 L/min</button>
+                        <button id="o2Decrease05" class="bg-red-400 hover:bg-red-500 text-white font-bold py-1 px-3 rounded-lg transition duration-200 text-xs sm:text-sm">- 0.5 L/min</button>
+                        <button id="o2Increase05" class="bg-green-400 hover:bg-green-500 text-white font-bold py-1 px-3 rounded-lg transition duration-200 text-xs sm:text-sm">+ 0.5 L/min</button>
+                        <button id="o2Increase" class="bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 rounded-lg transition duration-200 text-xs sm:text-sm">+ 1.0 L/min</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        
+        <!-- AI Analysis and Interpretation Panel --><div class="monitor-card rounded-xl p-4 md:p-6">
+            <h2 class="text-xl font-semibold mb-3 text-indigo-400 flex items-center">
+                <!-- Chip icon for AI Interpretation --><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+                    <line x1="9" x2="9" y1="21" y2="15"/>
+                    <line x1="15" x2="15" y1="21" y2="15"/>
+                    <line x1="3" x2="9" y1="9" y2="9"/>
+                    <line x1="3" x2="9" y1="15" y2="15"/>
+                    <line x1="15" x2="21" y1="9" y2="9"/>
+                    <line x1="15" x2="21" y1="15" y2="15"/>
+                    <path d="M12 12h.01"/>
+                </svg>
+                AI Interpretation (Clinical)
+            </h2>
+            <div class="text-sm space-y-2">
+                <p class="text-gray-300">
+                    <span class="font-bold text-green-400">Status:</span> <span id="aiStatus">Analyzing Waveform...</span>
+                </p>
+                <p class="text-gray-300">
+                    <span class="font-bold text-yellow-400">Recommendation:</span> <span id="aiRecommendation">Waiting for data analysis...</span>
+                </p>
+                <div class="mt-4 p-3 bg-gray-700/50 rounded-lg custom-scrollbar max-h-40 overflow-y-auto">
+                    <p class="text-xs text-gray-400 font-mono" id="aiDebugLog">
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Educational Panel --><div class="monitor-card rounded-xl p-4 md:p-6">
+            <h2 class="text-xl font-semibold mb-3 text-green-400">
+                Scenario Interpretation: Understanding the Data
+            </h2>
+            <div class="text-sm space-y-4">
+                <div class="bg-gray-700/50 p-3 rounded-lg">
+                    <p class="font-bold text-gray-100 mb-1">Waveform Analysis:</p>
+                    <p id="eduWaveform" class="text-gray-300 text-xs md:text-sm"></p>
+                </div>
+                <div class="bg-gray-700/50 p-3 rounded-lg">
+                    <p class="font-bold text-gray-100 mb-1">Numerical Interpretation:</p>
+                    <p id="eduNumerical" class="text-gray-300 text-xs md:text-sm"></p>
+                </div>
+                
+                <!-- NEW GLOSSARY BOX --><div class="bg-gray-700/50 p-3 rounded-lg">
+                    <p class="font-bold text-gray-100 mb-1 flex items-center">
+                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 text-indigo-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20h-3.5a2.5 2.5 0 0 1 0-5H20M6.5 2V7.5a2.5 2.5 0 0 0 5 0V2"/></svg>
+                        Clinical Terminology Glossary:
+                    </p>
+                    <div id="eduGlossary" class="text-gray-300 text-xs md:text-sm space-y-1">
+                        <!-- Definitions rendered by JS --></div>
+                </div>
+                
+            </div>
+        </div>
+
+        <!-- AI Q&A Panel --><div class="monitor-card rounded-xl p-4 md:p-6">
+            <h2 class="text-xl font-semibold mb-3 text-teal-400 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    <path d="M12 16a4 4 0 0 0 4-4H8a4 4 0 0 0 4 4z"/>
+                    <path d="M12 12V6"/>
+                </svg>
+                Ask the AI Expert
+            </h2>
+            <div class="space-y-4">
+                <textarea id="questionInput" rows="3" 
+                          class="w-full p-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-teal-500 focus:ring-teal-500" 
+                          placeholder="e.g., 'What does the difference between EtCO2 and Est. PaCO2 represent in this specific CPR scenario?' or 'Explain Phase III of the current waveform.'"
+                          onfocus="this.value = '';"
+                          ></textarea>
+                <button id="questionButton" onclick="askAIQuestion()" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200 flex items-center justify-center disabled:bg-gray-600">
+                    Ask the AI Expert
+                </button>
+                <div id="aiQAResponse" class="mt-4 p-4 bg-gray-800 rounded-lg border border-teal-500/50 min-h-[5rem]">
+                    <p class="text-gray-400">The AI is ready to answer questions about the current simulation scenario.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- *** DISCLAIMER MOVED HERE *** -->
+        <div class="w-full max-w-4xl disclaimer">
+            <strong>Disclaimer:</strong> This is an educational simulator and not a medical device. Clinical interpretations and recommendations are simplified examples for learning purposes only and do not replace professional medical judgment.
+        </div>
+
+    </div>
+
+    <script>
+        // --- Global Variables and Configuration ---
+        const canvas = document.getElementById('capnographCanvas');
+        const ctx = canvas.getContext('2d');
+        const etco2ValueEl = document.getElementById('etco2Value');
+        const rrValueEl = document.getElementById('rrValue');
+        const o2FlowValueEl = document.getElementById('o2FlowValue'); 
+        const modeSelect = document.getElementById('simulationMode');
+        // *** RENAMED PEECH CO2 ID ***
+        const estPaco2ValueEl = document.getElementById('estPaco2Value'); 
+        
+        // O2 Control Buttons
+        const o2DecreaseBtn = document.getElementById('o2Decrease');
+        const o2Decrease05Btn = document.getElementById('o2Decrease05');
+        const o2Increase05Btn = document.getElementById('o2Increase05');
+        const o2IncreaseBtn = document.getElementById('o2Increase');
+
+        // RR Control Buttons
+        const rrDecrease2Btn = document.getElementById('rrDecrease2');
+        const rrDecrease1Btn = document.getElementById('rrDecrease1');
+        const rrIncrease1Btn = document.getElementById('rrIncrease1');
+        const rrIncrease2Btn = document.getElementById('rrIncrease2');
+
+        // NEW: EtCO2 Control Buttons
+        const etco2Decrease1Btn = document.getElementById('etco2Decrease1');
+        const etco2Decrease05Btn = document.getElementById('etco2Decrease05');
+        const etco2Increase05Btn = document.getElementById('etco2Increase05');
+        const etco2Increase1Btn = document.getElementById('etco2Increase1');
+
+
+        // Y-Axis Label elements
+        const yAxis50El = document.getElementById('yAxis50'); 
+        const yAxis25El = document.getElementById('yAxis25'); 
+        
+        // Interpretation DOM Elements
+        const aiStatusEl = document.getElementById('aiStatus');
+        const aiRecommendationEl = document.getElementById('aiRecommendation');
+        const aiDebugLogEl = document.getElementById('aiDebugLog');
+
+        // Educational DOM Elements
+        const eduWaveformEl = document.getElementById('eduWaveform');
+        const eduNumericalEl = document.getElementById('eduNumerical');
+        const eduGlossaryEl = document.getElementById('eduGlossary'); 
+
+        
+        // Q&A DOM Elements
+        const questionInputEl = document.getElementById('questionInput');
+        const questionButtonEl = document.getElementById('questionButton');
+        const aiQAResponseEl = document.getElementById('aiQAResponse');
+
+
+        // NEW: Add Enter key listener for AI question input
+        questionInputEl.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && !event.shiftKey) { // Check if Enter is pressed WITHOUT shift
+                event.preventDefault(); // Stop 'Enter' from adding a new line
+                questionButtonEl.click(); // Trigger the button click
+                questionInputEl.blur(); // <-- ADDED: Remove focus from the text area
+            }
+        });
+
+
+        let interpretationTimeout; 
+
+        // Conversion Constant (Approx. 7.5 mmHg = 1% CO2)
+        const MMHG_TO_PERCENT_RATIO = 7.5;
+        // Max scale set to 7.5% (7.5 * 7.5 = 56.25 mmHg)
+        const MAX_MMHG_SCALE = 56.25; 
+        const MAX_PERCENT_SCALE = 7.5; 
+
+        // Constants for Y-Axis Grid/Labels
+        const GRID_25MMHG_PERCENT = 2.5; // 2.5% point
+        const GRID_50MMHG_PERCENT = 5.0; // 5.0% point
+        
+        // Converted to mmHg for internal canvas drawing logic
+        const GRID_25MMHG = GRID_25MMHG_PERCENT * MMHG_TO_PERCENT_RATIO; // 18.75 mmHg
+        const GRID_50MMHG = GRID_50MMHG_PERCENT * MMHG_TO_PERCENT_RATIO; // 37.5 mmHg
+
+        // Constants for X-Axis (Time) Grid/Labels
+        const UPDATE_INTERVAL_MS = 100; // 10Hz update rate
+        const TIME_PER_DIVISION_SEC = 5; // The 5s/div requested
+        const CANVAS_HEIGHT_PX = 200; // Must match CSS #capnographCanvas height
+
+
+        let dataPoints = [];
+        // Total time displayed: 300 points * 0.1s/point = 30 seconds
+        const maxDataPoints = 300; 
+        const TOTAL_TIME_SEC = maxDataPoints * (UPDATE_INTERVAL_MS / 1000);
+        const NUM_DIVISIONS = TOTAL_TIME_SEC / TIME_PER_DIVISION_SEC; // 30s / 5s = 6 divisions
+        
+        let animationFrameId;
+
+        // Note: Internal settings (etco2, amplitude, baseline) are PHYSIOLOGICAL (pre-dilution) and in mmHg 
+        let settings = {
+            etco2: 40, // Physiological EtCO2
+            _initialEtCO2: 40, // To track manual changes
+            rr: 16,
+            _initialRR: 16, // New property to track original RR for the scenario
+            o2Flow: 0.0, 
+            baseline: 0,
+            amplitude: 40,
+            offset: 0, 
+            phaseIIIUptake: 0.05, 
+            simulationMode: 'normal'
+        };
+        
+        // Helper function to convert mmHg to % CO2
+        function convertToPercent(mmHg) {
+            return mmHg / MMHG_TO_PERCENT_RATIO;
+        }
+
+        // *** FIXED: Moved markdownToHtml function definition to the top ***
+        // Helper function to convert markdown text to displayable HTML and fix CO2 subscript
+        const markdownToHtml = (text) => {
+            if (typeof text !== 'string') return ''; // Safety check
+            return text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                // Convert plain text EtCO2 to the subscript HTML version
+                .replace(/EtCO2/g, '<span style="white-space: nowrap;">EtCO<sub style="font-size: 0.7em;">2</sub></span>')
+                // Convert plain text CO2 to the subscript HTML version
+                .replace(/CO2/g, '<span style="white-space: nowrap;">CO<sub style="font-size: 0.7em;">2</sub></span>')
+                // *** ADDED: Convert Est. PaCO2 ***
+                .replace(/Est\. PaCO2/g, '<span style="white-space: nowrap;">Est. PaCO<sub style="font-size: 0.7em;">2</sub></span>');
+        }
+
+        // --- Educational Content Mapping (Base Content) ---
+        const educationalContent = {
+            normal: {
+                waveform: 'The waveform is a **normal square/rectangular shape**. It features a clear Phase III (Alveolar Plateau) that is flat, indicating uniform gas exchange. Phase I (Inspiration) returns sharply to the zero baseline.',
+                numerical: 'Both **EtCO2 (4.5-5.5%)** and **RR (12-20 BPM)** are within normal limits. This pattern is characteristic of **Eupnea**, signifying balanced oxygenation and ventilation.'
+            },
+            hypoventilation: {
+                waveform: 'The waveform maintains a normal shape but is **elevated in amplitude**. The high peak (**EtCO2**) reflects increased **CO2** retention in the lungs per breath.',
+                numerical: '**EtCO2 is high (typically > 5.8%)** and **RR is low (typically < 12 BPM)**. The patient is not eliminating enough **CO2** (Hypoventilation), leading to **Hypercarbia** (CO2 buildup).',
+            },
+            hyperventilation: {
+                waveform: 'The waveform shape remains normal but is **decreased in amplitude**. The low peak (**EtCO2**) shows that less **CO2** is present in the exhaled breath.',
+                numerical: '**EtCO2 is low (typically < 4.5%)** and **RR is often high (typically > 22 BPM)**. The patient is eliminating **CO2** too quickly (Hyperventilation), leading to **Hypocarbia** (low blood CO2).',
+            },
+            rebreathing: {
+                waveform: 'The most critical feature is the **elevated baseline**. The waveform does not return to the zero baseline during Phase I (Inspiration).',
+                numerical: 'The **baseline EtCO2 is non-zero**. This confirms the patient is inhaling previously exhaled **CO2**. This typically indicates a severe equipment malfunction, such as an exhausted **CO2** absorbent in a closed circuit.',
+            },
+            bronchospasm: {
+                waveform: 'This classic **"Shark Fin"** shape is caused by a steeply sloped and rounded Phase III (Alveolar Plateau). This lack of a flat plateau indicates severe **expiratory flow limitation**.',
+                numerical: '**EtCO2 is variable**, but the waveform shape is the key diagnostic. This pattern is seen in conditions like asthma or COPD exacerbation where narrowed airways make it difficult for the patient to fully exhale all **CO2**.',
+            },
+            cpr: {
+                waveform: 'The waveform is a **flat trace or very low amplitude/small** if chest compressions are being performed. The overall height is dramatically reduced.',
+                numerical: '**EtCO2 is critically low (typically < 1.3%)** and **RR is 0 (Apnea)**. This is diagnostic of **Cardiopulmonary Arrest (CPR)**. If compressions are ongoing, an **EtCO2** < 1.3% indicates poor-quality chest compressions.',
+            },
+            rosc: {
+                waveform: 'The waveform morphology rapidly returns to a more **normal-looking pattern**, and the amplitude experiences a sudden, significant increase.',
+                numerical: 'A **sudden, sustained jump in EtCO2** (e.g., from 1.3% to 5.5%) is the most important sign. This jump signifies a massive, sudden increase in cardiac output, which is the definition of **Return of Spontaneous Circulation (ROSC)**.',
+            }
+        };
+        
+        // --- Clinical Terminology Glossary ---
+        const clinicalGlossary = {
+            Eupnea: 'Normal, good, unlabored breathing. Defined by Respiratory Rate (RR) 12-20 BPM and normal EtCO2 (4.5-5.5%).', // <-- Corrected Normal EtCO2 range
+            Bradypnea: 'Abnormally slow breathing rate, clinically defined as RR less than 12 BPM. Often leads to CO2 retention (**Hypercarbia**).',
+            Tachypnea: 'Abnormally rapid breathing rate, clinically defined as RR greater than 20 BPM. Often leads to excessive CO2 elimination (**Hypocarbia**).', // Changed definition to > 20
+            Hypoventilation: 'Ventilation (breathing) that is inadequate to meet metabolic needs, resulting in CO2 buildup.',
+            Hyperventilation: 'Ventilation (breathing) that exceeds metabolic needs, resulting in excessive CO2 elimination.',
+            Hypercarbia: 'An elevated level of CO2 in the blood (EtCO2 typically > 5.5%).', // <-- Corrected threshold
+            Hypocarbia: 'A reduced level of CO2 in the blood (EtCO2 typically < 4.5%).',
+            "Shark Fin Waveform": 'The classic capnography pattern indicating severe expiratory flow limitation, typically seen in **Bronchospasm**.',
+            "Rebreathing": 'A serious equipment malfunction where the patient inhales exhaled CO2, identified by a non-zero capnogram baseline.',
+            "Cardiopulmonary Arrest": 'The absence of cardiac output. Confirmed by critically low EtCO2 (< 1.3%) and **Apnea**.',
+            "ROSC (Return of Spontaneous Circulation)": 'The return of a detectable pulse/cardiac output, identified by a **sudden, sustained jump** in EtCO2.',
+            "Dilution Artifact": 'An artificially lowered EtCO2 reading caused by supplemental O2 flow diluting the sample at the sampling port.',
+             // *** ADDED Est. PaCO2 definition ***
+            "Est. PaCO2": 'Estimated Partial Pressure of Arterial Carbon Dioxide. Typically calculated as EtCO2 + (2-5 mmHg) or in this simulation approx. EtCO2 + 4mmHg. The displayed value is converted to %.'
+        };
+
+        // Map base terms to scenarios for automatic display
+        const scenarioTerms = {
+            normal: ['Eupnea', 'Dilution Artifact', 'Est. PaCO2'], // Added Est. PaCO2
+            hypoventilation: ['Hypoventilation', 'Hypercarbia', 'Est. PaCO2'],
+            hyperventilation: ['Hyperventilation', 'Hypocarbia', 'Est. PaCO2'],
+            rebreathing: ['Rebreathing', 'Dilution Artifact', 'Est. PaCO2'],
+            bronchospasm: ['Shark Fin Waveform', 'Hypoventilation', 'Est. PaCO2'],
+            cpr: ['Cardiopulmonary Arrest', 'Hypocarbia', 'Est. PaCO2'],
+            rosc: ['ROSC (Return of Spontaneous Circulation)', 'Hypercarbia', 'Est. PaCO2'],
+        };
+
+        // --- Gemini API Logic ---
+        const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
+        const API_KEY = ""; // Placeholder for Canvas environment
+        const MAX_RETRIES = 5;
+
+        async function fetchWithRetry(url, options, retries = 0) {
+            try {
+                const response = await fetch(url, options);
+                if (response.status === 429 && retries < MAX_RETRIES) {
+                    const delay = Math.pow(2, retries) * 1000 + Math.random() * 1000;
+                    console.log(`Rate limit exceeded. Retrying in ${delay.toFixed(0)}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return fetchWithRetry(url, options, retries + 1);
+                }
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            } catch (error) {
+                if (retries < MAX_RETRIES) {
+                    const delay = Math.pow(2, retries) * 1000 + Math.random() * 1000;
+                    return fetchWithRetry(url, options, retries + 1);
+                }
+                throw error;
+            }
+        }
+
+        async function askAIQuestion() {
+            const question = questionInputEl.value.trim();
+            
+            // --- REMOVED: questionInputEl.value = ''; ---
+
+            if (!question) {
+                aiQAResponseEl.innerHTML = '<p class="text-red-400">Please enter a question.</p>';
+                return;
+            }
+            
+            // Calculate measured values for context
+            const dilutionMMHG = calculateO2Dilution(settings.o2Flow);
+            const measuredEtCO2 = settings.etco2 - dilutionMMHG;
+            const estPaco2 = (settings.etco2 + 4) - dilutionMMHG; // Also affected by dilution
+            
+            // Set UI state to loading
+            questionButtonEl.disabled = true;
+            questionButtonEl.innerHTML = '<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Analyzing...';
+            aiQAResponseEl.innerHTML = '<p class="text-gray-400">The AI is reviewing the scenario and formulating a response...</p>';
+
+            // Prepare contextual system instruction - Using plain EtCO2/CO2 now
+            const currentScenario = educationalContent[settings.simulationMode];
+            const systemInstruction = `You are a friendly, expert clinical educator specializing in Capnography and respiratory care. Your goal is to help a student understand the current data.
+The current clinical scenario is: "${settings.simulationMode}".
+The key data points are:
+- EtCO2 (Measured): ${convertToPercent(measuredEtCO2).toFixed(1)} %
+- Est. PaCO2 (Estimated Arterial): ${convertToPercent(estPaco2).toFixed(1)} %
+- EtCO2 (Physiological, internal value): ${convertToPercent(settings.etco2).toFixed(1)} %
+- RR: ${settings.rr.toFixed(0)} BPM
+- O₂ Flow: ${settings.o2Flow.toFixed(1)} L/min. (Dilution Artifact: ${convertToPercent(dilutionMMHG).toFixed(1)} %)
+
+Crucially, **DO NOT** use LaTeX or markdown dollar signs ($) for formatting. Answer the user's question concisely, referencing the current data or waveform state. Use the terms **EtCO2**, **CO2**, or **Est. PaCO2** which will be automatically formatted for display. Use HTML bold tags for emphasis.`;
+
+            const payload = {
+                contents: [{ parts: [{ text: question }] }],
+                systemInstruction: {
+                    parts: [{ text: systemInstruction }]
+                },
+            };
+
+            try {
+                const result = await fetchWithRetry(API_URL + `?key=${API_KEY}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const text = result?.candidates?.[0]?.content?.parts?.[0]?.text || "Error: Could not retrieve response text.";
+                
+                // Format using the unified markdownToHtml function
+                let formattedText = markdownToHtml(text);
+                formattedText = formattedText.replace(/\n/g, '<br>'); // Handle newlines from the model
+
+                aiQAResponseEl.innerHTML = formattedText; 
+                
+            } catch (error) {
+                console.error("AI API Error:", error);
+                aiQAResponseEl.innerHTML = `<p class="text-red-400">An error occurred while connecting to the AI service: ${error.message}. Please try again.</p>`;
+            } finally {
+                // Reset UI state
+                questionButtonEl.disabled = false;
+                questionButtonEl.innerHTML = 'Ask the AI Expert';
+            }
+        }
+
+
+        // --- Interpretation Update Logic ---
+        
+        // Helper function to render the glossary
+        function renderGlossary(terms) {
+            let html = '';
+            terms.forEach(term => {
+                const definition = clinicalGlossary[term];
+                if (definition) {
+                    // Format definition using markdownToHtml
+                    const formattedDefinition = markdownToHtml(definition);
+                        
+                    html += `<p><strong class="text-indigo-300">${term}:</strong> ${formattedDefinition}</p>`;
+                }
+            });
+            return html;
+        }
+
+
+        function updateInterpretationPanels() {
+            // Clear any existing AI delay
+            if (interpretationTimeout) {
+                clearTimeout(interpretationTimeout);
+            }
+            
+            // 1. Calculate measured values and artifacts
+            const dilutionMMHG = calculateO2Dilution(settings.o2Flow);
+            const measuredEtCO2MMHG = settings.etco2 - dilutionMMHG;
+            const measuredEtCO2Percent = convertToPercent(measuredEtCO2MMHG).toFixed(1);
+            const physiologicalEtCO2Percent = convertToPercent(settings.etco2).toFixed(1);
+            const dilutionPercent = convertToPercent(dilutionMMHG).toFixed(1);
+            const mode = settings.simulationMode;
+            // *** FIX: Use a copy of the content object, not a reference ***
+            const content = { ...educationalContent[mode] }; // Use spread to get a copy
+            
+            // 2. Setup AI Text
+            let statusText = '';
+            let recommendationText = ''; // This will hold the ACUTE clinical instruction
+            let debugLogText = '';
+            let aiDilutionNote = ''; // <-- *** FIXED: Declared dilutionNote at top of function scope ***
+            
+            // 3. Glossary terms setup
+            let termsToDisplay = [...scenarioTerms[mode]];
+            
+            // --- CRITICAL OVERRIDE: Check for Apnea (RR=0) FIRST ---
+            if (settings.rr === 0 && mode !== 'cpr') {
+                statusText = `<span class="text-red-800 bg-red-200/50 p-1 rounded font-bold animate-pulse">CRITICAL: APNEA DETECTED!</span> Patient is not breathing.`;
+                recommendationText = 'Immediately **Check Airway** and **Begin Bag-Valve-Mask Ventilation**. Call for assistance. Assess for pulse.';
+                
+                // Set Educational Panels for Apnea
+                eduWaveformEl.innerHTML = markdownToHtml('The waveform is a **flat line**, indicating no gas exchange (Apnea).');
+                eduNumericalEl.innerHTML = markdownToHtml(`**EtCO2 is 0.0%** and **RR is 0 BPM**. This is a life-threatening emergency requiring immediate intervention.`);
+                termsToDisplay = ['Cardiopulmonary Arrest']; // Use Apnea/Arrest terms
+                
+            } else {
+                // --- AI INTERPRETATION LOGIC (CLINICAL) ---
+                // Base Interpretation Logic (Prioritizing the Scenario)
+                switch (mode) {
+                    case 'normal':
+                        statusText = `Normal Sinusoidal Pattern detected. Parameters are stable (Eupnea).`;
+                        recommendationText = 'No immediate intervention required. Continue routine monitoring and observation.';
+                        
+                        // --- DYNAMIC OVERRIDES FOR NORMAL SCENARIO ---
+                        if (settings.o2Flow > 0) {
+                            statusText = `<span class="text-yellow-400 font-bold">WARNING: Dilution Artifact Detected.</span> Physiological state is normal, but measured EtCO2 is reduced.`;
+                            recommendationText = `If accurate EtCO2 is critical, **temporarily reduce O₂ flow** to confirm the true end-tidal value.`;
+                        }
+                        // Check EtCO2 (Physiological)
+                        if (settings.etco2 > (5.5 * MMHG_TO_PERCENT_RATIO)) { // > 5.5%
+                            statusText = `<span class="text-red-400 font-bold">ALERT: Hypercarbia Detected (${physiologicalEtCO2Percent}%).</span> EtCO2 is too high.`;
+                            recommendationText = `Patient is hypoventilating. **Increase respiratory support** or assess for cause of CO2 retention.`;
+                        } else if (settings.etco2 < (4.5 * MMHG_TO_PERCENT_RATIO)) { // < 4.5%
+                            statusText = `<span class="text-yellow-400 font-bold">ALERT: Hypocarbia Detected (${physiologicalEtCO2Percent}%).</span> EtCO2 is too low.`;
+                            recommendationText = `Patient is hyperventilating. **Investigate and treat the underlying cause** (pain, anxiety, fever).`;
+                        }
+                        // Check RR
+                        else if (settings.rr < 12) {
+                            // Bradypnea in a normal scenario
+                            statusText = `<span class="text-red-400 font-bold">ALERT: Bradypnea Detected (${settings.rr} BPM).</span> Respiratory Rate is too low.`;
+                            recommendationText = `Immediately **assess and stimulate the patient** to increase spontaneous respiratory drive. Investigate for excessive sedation.`;
+                        } else if (settings.rr > 20) { 
+                            // Tachypnea in a normal scenario (RR >= 21)
+                            statusText = `<span class="text-yellow-400 font-bold">ALERT: Tachypnea Detected (${settings.rr} BPM).</span> Respiratory Rate is too high.`;
+                            recommendationText = `**Investigate and treat the underlying cause** (pain, anxiety, fever). Coach patient to slow breathing if conscious.`;
+                        }
+                        break;
+
+                    case 'hypoventilation':
+                        statusText = `<span class="text-red-400 font-bold">CRITICAL: Severe Hypercarbia Detected.</span> EtCO2 is dangerously elevated due to inadequate ventilation.`;
+                        recommendationText = 'Immediately **Assist Ventilation** (e.g., with Bag-Valve-Mask) to achieve 20-24 breaths per minute to aggressively eliminate **CO2**. Assess for airway obstruction.';
+                        
+                        // DYNAMIC OVERRIDE: Check if user is correcting the condition
+                        if (settings.etco2 <= (5.8 * MMHG_TO_PERCENT_RATIO)) {
+                             statusText = `<span class="text-green-400 font-bold">RESPONSE: EtCO2 is Correcting.</span> Physiological EtCO2 is now ${physiologicalEtCO2Percent}%.`;
+                             recommendationText = `Continue current interventions. **Titrate ventilation** to maintain EtCO2 in the normal range (4.5-5.5%).`;
+                        }
+                        if (settings.rr >= 12) {
+                            statusText += ` <span class="text-green-400">(RR Correcting: ${settings.rr} BPM)</span>`;
+                        }
+                        break;
+
+                    case 'hyperventilation':
+                        statusText = `<span class="text-red-400 font-bold">ALERT: Severe Hypocarbia Detected.</span> EtCO2 is dangerously low.`;
+                        recommendationText = 'Immediately **investigate underlying causes** (pain, anxiety, or metabolic acidosis). **Coach the patient** to slow their breathing rate.';
+
+                        // DYNAMIC OVERRIDE: Check if user is correcting the condition
+                        if (settings.etco2 >= (4.5 * MMHG_TO_PERCENT_RATIO)) {
+                             statusText = `<span class="text-green-400 font-bold">RESPONSE: EtCO2 is Correcting.</span> Physiological EtCO2 is now ${physiologicalEtCO2Percent}%.`;
+                             recommendationText = `Continue current interventions. **Titrate support** to maintain EtCO2 in the normal range (4.5-5.5%).`;
+                        }
+                        if (settings.rr <= 20) {
+                            statusText += ` <span class="text-green-400">(RR Correcting: ${settings.rr} BPM)</span>`;
+                        }
+                        break;
+
+                    case 'rebreathing':
+                        statusText = `<span class="text-red-400 font-bold">EMERGENCY: Rebreathing Confirmed.</span> Baseline EtCO2 is non-zero, indicating inhaled **CO2**.`;
+                        recommendationText = 'Immediately **disconnect patient from the system** and **switch to a clean ventilation source** (e.g., Bag-Valve Mask with fresh gas). Check CO2 absorbent and system circuit for failure.';
+                        
+                        // Add secondary check for RR
+                        if (settings.rr < 12) {
+                             statusText += ` <span class="text-red-500">(Secondary: Bradypnea)</span>`;
+                             recommendationText += ` **Assist ventilation** if patient is sedated or bradypneic.`;
+                        } else if (settings.rr > 20) {
+                             statusText += ` <span class="text-yellow-500">(Secondary: Tachypnea)</span>`;
+                             recommendationText += ` Patient is attempting to compensate; **fix the circuit immediately**.`;
+                        }
+                        // Add secondary check for EtCO2
+                        if (settings.etco2 > (6.0 * MMHG_TO_PERCENT_RATIO)) {
+                            statusText += ` <span class="text-red-500">(Secondary: Hypercarbia)</span>`;
+                        } else if (settings.etco2 < (4.5 * MMHG_TO_PERCENT_RATIO)) {
+                            statusText += ` <span class="text-yellow-500">(Secondary: Hypocarbia)</span>`;
+                        }
+                        break;
+                    
+                    case 'bronchospasm':
+                        statusText = `<span class="text-red-400 font-bold">CRITICAL: Severe Airway Obstruction ("Shark Fin").</span> Waveform indicates restricted expiratory flow.`;
+                        recommendationText = 'Immediately **administer bronchodilators** (e.g., nebulized Albuterol). Check for tube kinking or foreign body. Prepare for deep suctioning and potential intubation.';
+                        
+                         // Add secondary check for RR
+                        if (settings.rr < 12) {
+                             statusText += ` <span class="text-red-500">(Secondary: Bradypnea / Impending Failure)</span>`;
+                             recommendationText += ` **Prepare to assist ventilation**; this is a sign of exhaustion.`;
+                        } else if (settings.rr > 20) {
+                             statusText += ` <span class="text-yellow-500">(Secondary: Tachypnea)</span>`;
+                             recommendationText += ` Patient is in respiratory distress; **do not delay bronchodilators**.`;
+                        }
+                        // Add secondary check for EtCO2
+                        if (settings.etco2 > (6.0 * MMHG_TO_PERCENT_RATIO)) {
+                            statusText += ` <span class="text-red-500">(Secondary: Hypercarbia)</span>`;
+                        } else if (settings.etco2 < (4.5 * MMHG_TO_PERCENT_RATIO)) {
+                            statusText += ` <span class="text-yellow-500">(Secondary: Hypocarbia)</span>`;
+                        }
+                        break;
+
+                    case 'cpr':
+                        // *** FIXED: Added dynamic ROSC check here ***
+                        const roscEtCO2Threshold = 4.5 * MMHG_TO_PERCENT_RATIO; // 4.5%
+                        const roscRRThreshold = 8; // 8 BPM
+
+                        if (settings.etco2 >= roscEtCO2Threshold && settings.rr >= roscRRThreshold) {
+                            // If EtCO2 and RR are manually raised, it's ROSC
+                            statusText = `<span class="text-green-400 font-bold">SUCCESS: ROSC Confirmed!</span> Sudden, sustained increase in EtCO2 and return of spontaneous respiration.`;
+                            recommendationText = 'Immediately **STOP chest compressions**. Check for palpable pulse and maintain airway. Control ventilation to **target EtCO2 4.5–6.0%** to prevent secondary brain injury.';
+                        } else {
+                            // Original CPR diagnosis
+                            statusText = `<span class="text-red-800 bg-red-200/50 p-1 rounded font-bold animate-pulse">CARDIAC ARREST - EtCO2 Failure.</span> Critically low EtCO2 (${physiologicalEtCO2Percent}%) during CPR.`;
+                            recommendationText = 'Immediately **optimize chest compression quality and depth**. Minimize interruptions. Aim for EtCO2 > 1.3% (10 mmHg). Call for IV/IO access and prepare vasopressors.';
+                        }
+                        break;
+
+                    case 'rosc':
+                        statusText = `<span class="text-green-400 font-bold">SUCCESS: ROSC Confirmed!</span> Sudden, sustained increase in EtCO2.`;
+                        recommendationText = 'Immediately **STOP chest compressions**. Check for palpable pulse and maintain airway. Control ventilation to **target EtCO2 4.5–6.0%** to prevent secondary brain injury.';
+                        
+                        // DYNAMIC CHECK: Check if patient re-arrests
+                         if (settings.etco2 < (2.0 * MMHG_TO_PERCENT_RATIO) || settings.rr < 6) {
+                             statusText = `<span class="text-red-800 bg-red-200/50 p-1 rounded font-bold animate-pulse">CRITICAL: Patient Lost Pulse!</span> EtCO2 and RR values are declining post-ROSC.`;
+                             recommendationText = 'Immediately **Resume Chest Compressions**. Patient has re-arrested. Re-administer ACLS protocol.';
+                         }
+                        break;
+                }
+            
+                // --- EDUCATIONAL PANEL LOGIC (DYNAMIC) ---
+                let dynamicNumerical = content.numerical;
+                let rrNote = '';
+                let etco2Note = '';
+            
+                // Update Waveform Analysis (based on selected mode)
+                eduWaveformEl.innerHTML = markdownToHtml(content.waveform);
+
+                // A. O2 dilution note (affects ALL scenarios)
+                if (settings.o2Flow > 0) {
+                    etco2Note = `<br> <strong class="text-yellow-300">DILUTION ARTIFACT:</strong> The measured EtCO2 is **${measuredEtCO2Percent}%** (Physiological EtCO2 is ${physiologicalEtCO2Percent}%) due to **${dilutionPercent}% dilution** from ${settings.o2Flow.toFixed(1)} L/min O₂ flow. Always consider this artifact when administering supplemental oxygen.`;
+                    if (!termsToDisplay.includes('Dilution Artifact')) {
+                        termsToDisplay.push('Dilution Artifact');
+                    }
+                }
+                
+                // B. Logic to address contradiction in NORMAL mode only
+                if (mode === 'normal') {
+                    const normalMinMMHG = 4.5 * MMHG_TO_PERCENT_RATIO; // 33.75
+                    const normalMaxMMHG = 5.5 * MMHG_TO_PERCENT_RATIO; // 41.25
+                    let baseText = content.numerical;
+                    let modified = false;
+
+                    // Check for EtCO2 deviations
+                    if (settings.etco2 < normalMinMMHG) {
+                        const etco2Observation = `<br> <strong class="text-yellow-400">OBSERVATION (EtCO2):</strong> Physiological EtCO2 is **${physiologicalEtCO2Percent}%** (Below the normal 4.5-5.5% range), confirming **Hypocarbia**.`;
+                        baseText = baseText.replace('Both **EtCO2 (4.5-5.5%)** and **RR (12-20 BPM)** are within normal limits.', 'RR (12-20 BPM) is normal, but Physiological EtCO2 is **ABNORMAL**.');
+                        etco2Note += etco2Observation;
+                        termsToDisplay.push('Hypocarbia');
+                        modified = true;
+                    } else if (settings.etco2 > normalMaxMMHG) {
+                        const etco2Observation = `<br> <strong class="text-red-400">CRITICAL OBSERVATION (EtCO2):</strong> Physiological EtCO2 is **${physiologicalEtCO2Percent}%** (Above the normal 4.5-5.5% range), confirming **Hypercarbia**.`;
+                        baseText = baseText.replace('Both **EtCO2 (4.5-5.5%)** and **RR (12-20 BPM)** are within normal limits.', 'RR (12-20 BPM) is normal, but Physiological EtCO2 is **ABNORMAL**.');
+                        etco2Note += etco2Observation;
+                        termsToDisplay.push('Hypercarbia');
+                        modified = true;
+                    }
+
+                    // Check for RR deviations
+                    if (settings.rr < 12) {
+                        const statusTextEducation = `<br> <strong class="text-red-400">CRITICAL OBSERVATION (RR):</strong> The Respiratory Rate is currently **${settings.rr} BPM** (The normal range for this Eupneic pattern is 12-20 BPM), confirming **Bradypnea**. This change in rate indicates an independent clinical issue (e.g., sedation) despite the normal waveform shape.`;
+                        baseText = baseText.replace('Both **EtCO2 (4.5-5.5%)** and **RR (12-20 BPM)** are within normal limits.', modified ? 'Both EtCO2 and RR are **ABNORMAL**.' : 'EtCO2 (4.5-5.5%) is normal, but the Respiratory Rate is **ABNORMAL**.');
+                        rrNote += statusTextEducation;
+                        
+                        // Glossary update
+                        termsToDisplay.push('Bradypnea');
+                        termsToDisplay = termsToDisplay.filter(t => t !== 'Eupnea'); 
+                    } else if (settings.rr > 20) { 
+                        const statusTextEducation = `<br> <strong class="text-yellow-400">OBSERVATION (RR):</strong> The Respiratory Rate is currently **${settings.rr} BPM** (Above the normal 12-20 range), confirming **Tachypnea**. While the waveform shape is normal, the rapid rate may indicate pain, anxiety, or early metabolic distress.`;
+                        baseText = baseText.replace('Both **EtCO2 (4.5-5.5%)** and **RR (12-20 BPM)** are within normal limits.', modified ? 'Both EtCO2 and RR are **ABNORMAL**.' : 'EtCO2 (4.5-5.5%) is normal, but the Respiratory Rate is **ABNORMAL**.');
+                        rrNote += statusTextEducation;
+                        
+                        // Glossary update
+                        termsToDisplay.push('Tachypnea');
+                        termsToDisplay = termsToDisplay.filter(t => t !== 'Eupnea');
+                    }
+                    dynamicNumerical = baseText;
+                }
+
+                // C. Logic for other scenarios (Hypoventilation, Hyperventilation, Rebreathing, Bronchospasm)
+                else if (mode === 'hypoventilation') {
+                     // Check for EtCO2 correction
+                     if (settings.etco2 <= (5.8 * MMHG_TO_PERCENT_RATIO)) {
+                        const etco2CorrectionNote = `<br> <strong class="text-green-400">CLINICAL RESPONSE (EtCO2):</strong> The current EtCO2 is **${physiologicalEtCO2Percent}%** (Correcting towards normal).`;
+                        dynamicNumerical = dynamicNumerical.replace('**EtCO2 is high (typically > 5.8%)**', `EtCO2 is now <strong>${physiologicalEtCO2Percent}%</strong> (Correcting from high value)`);
+                        etco2Note += etco2CorrectionNote;
+                     }
+                     // Check for RR correction
+                     if (settings.rr >= 12) {
+                        const rrCorrectionNote = `<br> <strong class="text-green-400">CLINICAL RESPONSE:</strong> The current RR is **${settings.rr} BPM** (Above the initial Hypoventilation rate). This represents a partial **correction of the Hypoventilation**.`;
+                        // UPDATED: Replace conflicting base text
+                        dynamicNumerical = dynamicNumerical.replace('**RR is low (typically < 12 BPM)**', `RR is now <strong>${settings.rr} BPM</strong> (Correcting from low rate)`);
+                        rrNote += rrCorrectionNote;
+                     }
+                } else if (mode === 'hyperventilation') {
+                     // Check for EtCO2 correction
+                     if (settings.etco2 >= (4.5 * MMHG_TO_PERCENT_RATIO)) {
+                        const etco2CorrectionNote = `<br> <strong class="text-green-400">CLINICAL RESPONSE (EtCO2):</strong> The current EtCO2 is **${physiologicalEtCO2Percent}%** (Correcting towards normal).`;
+                        dynamicNumerical = dynamicNumerical.replace('**EtCO2 is low (typically < 4.5%)**', `EtCO2 is now <strong>${physiologicalEtCO2Percent}%</strong> (Correcting from low value)`);
+                        etco2Note += etco2CorrectionNote;
+                     }
+                     // Check for RR correction
+                     if (settings.rr <= 20) { // Checking if rate has dropped back into the normal zone
+                        const rrCorrectionNote = `<br> <strong class="text-green-400">CLINICAL RESPONSE:</strong> The current RR is **${settings.rr} BPM** (Closer to normal limits). This represents a partial **correction of the Hyperventilation**.`;
+                        // UPDATED: Replace conflicting base text
+                        dynamicNumerical = dynamicNumerical.replace('**RR is often high (typically > 22 BPM)**', `RR is now <strong>${settings.rr} BPM</strong> (Correcting from high rate)`);
+                        rrNote += rrCorrectionNote;
+                     }
+                } else if (mode === 'rebreathing' || mode === 'bronchospasm') {
+                    // Add secondary RR warnings for these scenarios
+                     if (settings.rr < 12) {
+                        const rrWarningNote = `<br> <strong class="text-red-400">SECONDARY ALERT (RR):</strong> The current RR is **${settings.rr} BPM**, indicating **Bradypnea**. This is a dangerous secondary sign, suggesting sedation or patient exhaustion.`;
+                        rrNote += rrWarningNote;
+                        termsToDisplay.push('Bradypnea');
+                     } else if (settings.rr > 20) {
+                         const rrWarningNote = `<br> <strong class="text-yellow-400">SECONDARY ALERT (RR):</strong> The current RR is **${settings.rr} BPM**, indicating **Tachypnea**. The patient is in respiratory distress, attempting to compensate for the underlying issue.`;
+                        rrNote += rrWarningNote;
+                        termsToDisplay.push('Tachypnea');
+                     }
+                     // Add secondary EtCO2 warnings for these scenarios
+                     if (settings.etco2 < (4.5 * MMHG_TO_PERCENT_RATIO)) {
+                        const etco2WarningNote = `<br> <strong class="text-yellow-400">SECONDARY ALERT (EtCO2):</strong> The current EtCO2 is **${physiologicalEtCO2Percent}%**, indicating **Hypocarbia**.`;
+                        etco2Note += etco2WarningNote;
+                        termsToDisplay.push('Hypocarbia');
+                     } else if (settings.etco2 > (6.0 * MMHG_TO_PERCENT_RATIO)) {
+                        const etco2WarningNote = `<br> <strong class="text-red-400">SECONDARY ALERT (EtCO2):</strong> The current EtCO2 is **${physiologicalEtCO2Percent}%**, indicating **Hypercarbia**.`;
+                        etco2Note += etco2WarningNote;
+                        termsToDisplay.push('Hypercarbia');
+                     }
+                }
+                // *** FIXED: Added dynamic ROSC check for CPR educational panel ***
+                else if (mode === 'cpr') {
+                    const roscEtCO2Threshold = 4.5 * MMHG_TO_PERCENT_RATIO;
+                    const roscRRThreshold = 8;
+
+                    if (settings.etco2 >= roscEtCO2Threshold && settings.rr >= roscRRThreshold) {
+                        // Manually set ROSC content
+                        eduWaveformEl.innerHTML = markdownToHtml(educationalContent.rosc.waveform);
+                        dynamicNumerical = `**EtCO2 is ${physiologicalEtCO2Percent}%** and **RR is ${settings.rr} BPM**. This sudden jump from CPR values confirms **Return of Spontaneous Circulation (ROSC)**.`;
+                        termsToDisplay = ['ROSC (Return of Spontaneous Circulation)'];
+                    }
+                }
+                
+                // Update Numerical Interpretation (with dynamic notes)
+                eduNumericalEl.innerHTML = markdownToHtml(dynamicNumerical + etco2Note + rrNote);
+                
+                // Update Glossary Interpretation
+                termsToDisplay = [...new Set(termsToDisplay)]; // Deduplicate
+                eduGlossaryEl.innerHTML = renderGlossary(termsToDisplay);
+            }
+            
+            // --- AI Panel Update (Final Step) ---
+            // Re-declare dilutionNote for this scope
+            aiDilutionNote = settings.o2Flow > 0  // <-- *** FIXED: Used aiDilutionNote ***
+                ? ` **Dilution Artifact**: ${dilutionPercent}% EtCO2 reduction due to ${settings.o2Flow.toFixed(1)} L/min O₂ flow.`
+                : ' No O₂ dilution artifact detected.';
+            
+            debugLogText = `[Interpretation Log] Scenario: ${mode.toUpperCase()}. Physiological EtCO2: ${physiologicalEtCO2Percent}%. Measured: ${measuredEtCO2Percent}%. RR: ${settings.rr} BPM. ${aiDilutionNote.trim()}`;
+
+            // 4. Schedule the AI interpretation update after 1000ms (1 second)
+            aiStatusEl.innerHTML = '<span class="text-yellow-400">Analyzing Waveform...</span>';
+            aiRecommendationEl.innerHTML = 'Recalculating...';
+            aiDebugLogEl.textContent = '...Recalculating AI processing (1.0s delay) due to control change...';
+
+
+            interpretationTimeout = setTimeout(() => {
+                aiStatusEl.innerHTML = markdownToHtml(statusText); // Apply markdownToHtml to all outputs
+                aiRecommendationEl.innerHTML = markdownToHtml(recommendationText);
+                aiDebugLogEl.textContent = debugLogText;
+            }, 1000); // 1-second delay
+            
+            // Ensure display values update immediately
+            updateDisplayValues(dilutionMMHG);
+        }
+
+        // --- Initialization and Setup ---
+
+        function setYAxisLabelPositions() {
+             // Calculate Y-axis positions for static HTML labels (200px high canvas)
+            // Use the new GRID_50MMHG_PERCENT (5.0%) and GRID_25MMHG_PERCENT (2.5%) relative to the MAX_PERCENT_SCALE (7.5%)
+            const y50_pos = CANVAS_HEIGHT_PX * (1 - (GRID_50MMHG_PERCENT / MAX_PERCENT_SCALE)) - 7;
+            const y25_pos = CANVAS_HEIGHT_PX * (1 - (GRID_25MMHG_PERCENT / MAX_PERCENT_SCALE)) - 7;
+
+            yAxis50El.style.top = `${y50_pos}px`;
+            yAxis25El.style.top = `${y25_pos}px`;
+        }
+
+
+        function resizeCanvas() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        modeSelect.addEventListener('change', (e) => {
+            settings.simulationMode = e.target.value;
+            applySimulationMode(settings.simulationMode);
+            // Clear Q&A on scenario change
+            questionInputEl.value = '';
+            aiQAResponseEl.innerHTML = '<p class="text-gray-400">The AI is ready to answer questions about the new simulation scenario.</p>';
+        });
+
+        function updateDisplayValues(dilutionMMHG) {
+            // Update main UI elements based on MEASURED values
+            const measuredEtCO2 = settings.etco2 - dilutionMMHG;
+            
+            etco2ValueEl.textContent = convertToPercent(measuredEtCO2).toFixed(1);
+            rrValueEl.textContent = settings.rr.toFixed(0);
+            o2FlowValueEl.textContent = settings.o2Flow.toFixed(1); 
+            
+            // Peech CO2 also affected by dilution
+             // *** UPDATED Est. PaCO2 calculation ***
+            const estPaco2Value = (settings.etco2 + 4) - dilutionMMHG;
+            estPaco2ValueEl.textContent = convertToPercent(estPaco2Value).toFixed(1); 
+        }
+
+        function adjustO2Flow(amount) {
+            // Cap the change amount to a reasonable max (15 L/min) and min (0 L/min)
+            settings.o2Flow = settings.o2Flow + amount;
+            settings.o2Flow = Math.round(settings.o2Flow * 10) / 10; // Precision fix for floating point
+            settings.o2Flow = Math.max(0.0, Math.min(15.0, settings.o2Flow));
+
+            // NEW: Call interpretation update
+            updateInterpretationPanels();
+        }
+        
+        function adjustRR(amount) {
+            // RR must be an integer (breaths)
+            settings.rr = settings.rr + amount;
+            // Clamp RR to a clinical range (0 to 40 BPM)
+            settings.rr = Math.max(0, Math.min(40, settings.rr));
+            
+            // NEW: Call interpretation update
+            updateInterpretationPanels();
+        }
+
+        // NEW: Function to adjust physiological EtCO2
+        function adjustEtCO2(amountInPercent) {
+            const amountInMMHG = amountInPercent * MMHG_TO_PERCENT_RATIO;
+            settings.etco2 += amountInMMHG;
+            // Clamp physiological EtCO2 to a clinical range (e.g., 0 to 80 mmHg)
+            settings.etco2 = Math.max(0, Math.min(80, settings.etco2));
+            
+            // Also adjust amplitude to match, assuming baseline is 0
+            if (settings.baseline === 0) {
+                settings.amplitude = settings.etco2;
+            } else {
+                 settings.amplitude = settings.etco2 - settings.baseline;
+            }
+
+            // Call interpretation update
+            updateInterpretationPanels();
+        }
+
+        // Add event listeners for O2 control buttons
+        o2DecreaseBtn.addEventListener('click', () => adjustO2Flow(-1.0));
+        o2Decrease05Btn.addEventListener('click', () => adjustO2Flow(-0.5));
+        o2Increase05Btn.addEventListener('click', () => adjustO2Flow(0.5));
+        o2IncreaseBtn.addEventListener('click', () => adjustO2Flow(1.0));
+        
+        // Add event listeners for RR control buttons
+        rrDecrease2Btn.addEventListener('click', () => adjustRR(-2));
+        rrDecrease1Btn.addEventListener('click', () => adjustRR(-1));
+        rrIncrease1Btn.addEventListener('click', () => adjustRR(1));
+        rrIncrease2Btn.addEventListener('click', () => adjustRR(2));
+
+        // NEW: Add event listeners for EtCO2 control buttons
+        etco2Decrease1Btn.addEventListener('click', () => adjustEtCO2(-1.0));
+        etco2Decrease05Btn.addEventListener('click', () => adjustEtCO2(-0.5));
+        etco2Increase05Btn.addEventListener('click', () => adjustEtCO2(0.5));
+        etco2Increase1Btn.addEventListener('click', () => adjustEtCO2(1.0));
+
+
+        function applySimulationMode(mode) {
+            // 1. Set the scenario PHYSIOLOGICAL parameters
+            settings.baseline = 0;
+            settings.amplitude = 40;
+            settings.rr = 16;
+            settings.etco2 = 40;
+            settings.o2Flow = 0.0;
+            settings.phaseIIIUptake = 0.05; 
+            
+            let initialRR = 16; // Default starting RR
+
+            switch (mode) {
+                case 'normal':
+                    settings.etco2 = 40 + (Math.random() * 4 - 2); 
+                    settings.rr = 16 + Math.floor(Math.random() * 4 - 2); 
+                    settings.amplitude = settings.etco2;
+                    settings.o2Flow = 0.0; 
+                    settings.phaseIIIUptake = 0.01; 
+                    initialRR = settings.rr;
+                    break;
+
+                case 'hypoventilation':
+                    settings.etco2 = 55 + (Math.random() * 5 - 2); 
+                    settings.rr = 10 + Math.floor(Math.random() * 3 - 1); 
+                    settings.amplitude = settings.etco2;
+                    settings.o2Flow = 6.0; 
+                    initialRR = settings.rr;
+                    break;
+
+                case 'hyperventilation':
+                    settings.etco2 = 25 + (Math.random() * 5 - 2); 
+                    settings.rr = 24 + Math.floor(Math.random() * 4 - 2); 
+                    settings.amplitude = settings.etco2;
+                    settings.o2Flow = 4.0; 
+                    initialRR = settings.rr;
+                    break;
+
+                case 'rebreathing':
+                    settings.baseline = 5 + (Math.random() * 5 - 2); 
+                    settings.etco2 = 45 + (Math.random() * 5 - 2); 
+                    settings.amplitude = settings.etco2 - settings.baseline;
+                    settings.o2Flow = 2.0; 
+                    initialRR = 18;
+                    settings.rr = initialRR;
+                    break;
+                
+                case 'bronchospasm':
+                    settings.etco2 = 40 + (Math.random() * 4 - 2);
+                    settings.rr = 20 + Math.floor(Math.random() * 4 - 2);
+                    settings.amplitude = settings.etco2;
+                    settings.o2Flow = 6.0; 
+                    settings.phaseIIIUptake = 0.45; 
+                    initialRR = settings.rr;
+                    break;
+
+                case 'cpr':
+                    settings.etco2 = 12 + (Math.random() * 4 - 2); 
+                    settings.rr = 0; 
+                    settings.amplitude = settings.etco2 * 0.5; 
+                    settings.o2Flow = 15.0; 
+                    initialRR = 0;
+                    break;
+
+                case 'rosc':
+                    settings.etco2 = 45 + (Math.random() * 5 - 2); 
+                    settings.rr = 10 + Math.floor(Math.random() * 5); 
+                    settings.amplitude = settings.etco2;
+                    settings.o2Flow = 15.0; 
+                    initialRR = settings.rr;
+                    break;
+            }
+            
+            // Set the initial RR and EtCO2 for comparison with manual changes
+            settings._initialRR = initialRR;
+            settings._initialEtCO2 = settings.etco2; // Store initial physiological EtCO2
+
+            // 2. Call the new interpretation function to update all panels
+            updateInterpretationPanels();
+        }
+
+        // --- Dilution Logic ---
+        // Function to calculate artificial EtCO2 reduction due to high O2 flow dilution artifact.
+        function calculateO2Dilution(o2Flow) {
+            // Max dilution is 2.5 mmHg, reached at 15 L/min
+            const maxFlowForCalculation = 15.0;
+            const maxDilutionMMHG = 2.5; 
+            
+            // Linearly interpolate up to 15 L/min
+            if (o2Flow >= maxFlowForCalculation) {
+                return maxDilutionMMHG;
+            }
+            return (o2Flow / maxFlowForCalculation) * maxDilutionMMHG;
+        }
+
+        // --- Waveform Generation and Drawing ---
+
+        function generateCapnogramValue(time, measuredEtCO2, measuredAmplitude, finalBaseline) {
+            // Use the current RR setting to determine the cycle time
+            const timeScale = settings.rr > 0 ? 60 / settings.rr : 10; 
+            const cycleTime = time % timeScale; 
+
+            let y = 0;
+            const phase = cycleTime / timeScale; 
+
+            if (settings.rr === 0) {
+                // If RR is 0 (Apnea/CPR), the value stays low/flat
+                return finalBaseline + (Math.random() - 0.5) * 0.5;
+            }
+
+            if (phase < 0.2) {
+                // Phase I & II: Expiratory Upstroke
+                y = finalBaseline + measuredAmplitude * Math.pow(phase / 0.2, 12); // <-- INCREASED FROM 8 to 12
+            } else if (phase < 0.8) {
+                // Phase III: Alveolar Plateau
+                
+                // UPDATED: Check if we are in a "normal" scenario (uptake = 0.01)
+                if (settings.phaseIIIUptake <= 0.01) {
+                    // For "normal" scenario, force a perfectly flat plateau to match the idealized image
+                    y = finalBaseline + measuredAmplitude;
+                } else {
+                    // For other scenarios (like bronchospasm), calculate the slope
+                    const plateauPhase = (phase - 0.2) / 0.6; 
+                    const slopeFactor = settings.phaseIIIUptake; 
+                    y = finalBaseline + measuredAmplitude * (1 - (1 - slopeFactor) * (1 - plateauPhase));
+                }
+
+            } else {
+                // Phase IV: Inspiratory Downstroke
+                const downstrokePhase = (phase - 0.8) / 0.2; 
+                y = finalBaseline + measuredAmplitude * (1 - Math.pow(downstrokePhase, 12)); // <-- INCREASED FROM 8 to 12
+            }
+
+            // Add slight noise
+            if(settings.simulationMode !== 'cpr') {
+                y += (Math.random() - 0.5) * 1.5;
+            } else {
+                 y += (Math.random() - 0.5) * 0.5; 
+            }
+
+            return Math.min(y, measuredEtCO2);
+        }
+
+        function updateData() {
+            // 1. Calculate the dilution artifact based on the current O2 flow
+            const dilutionMMHG = calculateO2Dilution(settings.o2Flow);
+
+            // 2. Determine the *measured* physiological parameters for drawing
+            const measuredEtCO2 = settings.etco2 - dilutionMMHG;
+            // Dilution slightly reduces amplitude too (less CO2 in the sample)
+            const measuredAmplitude = settings.amplitude - dilutionMMHG * 0.6; 
+            // Slight baseline depression from dilution (capped at 0)
+            const measuredBaseline = settings.baseline - (dilutionMMHG * 0.15); 
+            const finalBaseline = Math.max(0, measuredBaseline);
+
+
+            const time = performance.now() / 1000;
+            const newValueMMHG = generateCapnogramValue(time + settings.offset, measuredEtCO2, measuredAmplitude, finalBaseline);
+
+            dataPoints.push(newValueMMHG);
+            if (dataPoints.length > maxDataPoints) {
+                dataPoints.shift();
+            }
+
+            // Update UI numerical displays based on the measured values
+            updateDisplayValues(dilutionMMHG);
+        }
+
+        function drawWaveform() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // --- Draw Grid Lines (Y-Axis / Concentration) ---
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 1;
+
+            const y25 = canvas.height * (1 - (GRID_25MMHG / MAX_MMHG_SCALE));
+            const y50 = canvas.height * (1 - (GRID_50MMHG / MAX_MMHG_SCALE));
+            
+            ctx.moveTo(0, y25);
+            ctx.lineTo(canvas.width, y25);
+            ctx.moveTo(0, y50);
+            ctx.lineTo(canvas.width, y50);
+
+            // Base line (0%)
+            ctx.moveTo(0, canvas.height);
+            ctx.lineTo(canvas.width, canvas.height);
+            ctx.stroke();
+
+            // --- Draw Grid Lines (X-Axis / Time: 5s/div) ---
+            const divisionWidth = canvas.width / NUM_DIVISIONS;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; // Slightly brighter for major divisions
+            
+            // Draw 5 internal dividing lines (creating 6 divisions)
+            for (let i = 1; i < NUM_DIVISIONS; i++) {
+                const x = i * divisionWidth;
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+
+                // Draw Time Labels (e.g., 5s, 10s, 15s)
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.font = '10px Inter';
+                const timeLabel = `${i * TIME_PER_DIVISION_SEC}s`;
+                ctx.fillText(timeLabel, x + 5, canvas.height - 5); 
+            }
+            
+            // Add '0s' label at the beginning
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.font = '10px Inter';
+            ctx.fillText('0s', 5, canvas.height - 5);
+
+
+            // --- Draw the waveform ---
+            ctx.beginPath();
+            // UPDATED: Changed color to match the RR value (text-blue-400)
+            ctx.strokeStyle = '#60A5FA'; 
+            ctx.lineWidth = 3;
+
+            const step = canvas.width / maxDataPoints;
+
+            dataPoints.forEach((valueMMHG, i) => {
+                const scaledValue = valueMMHG / MAX_MMHG_SCALE; 
+                const y = canvas.height * (1 - scaledValue);
+                const x = i * step;
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+
+            ctx.stroke();
+        }
+
+        let lastUpdate = performance.now();
+        const updateInterval = UPDATE_INTERVAL_MS; 
+
+        function animate(timestamp) {
+            if (timestamp - lastUpdate > updateInterval) {
+                updateData();
+                drawWaveform();
+                lastUpdate = timestamp;
+            }
+
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        // Start the application loop
+        window.onload = function () {
+            setYAxisLabelPositions();
+            applySimulationMode('normal'); // Start in normal mode
+            animate(performance.now());
+        }
+    </script>
+</body>
+</html>
+
